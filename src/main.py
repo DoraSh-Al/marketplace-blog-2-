@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Request
 
 from src.api.articles import router as articles_router  # Добавляем
 from src.api.auth import router as auth_router
+from src.api.categories import router as categories_router
+from src.api.users import router as users_router
 from src.utils.auth import decode_access_token
 
 app = FastAPI(title="Marketplace Blog API")
@@ -9,6 +11,8 @@ app = FastAPI(title="Marketplace Blog API")
 # Подключаем маршруты
 app.include_router(auth_router)
 app.include_router(articles_router)  # Добавляем
+app.include_router(categories_router)
+app.include_router(users_router)
 
 # Middleware для проверки токена
 @app.middleware("http")
@@ -25,3 +29,5 @@ async def auth_middleware(request: Request, call_next):
 @app.get("/")
 def read_root():
     return {"message": "Hello, World!"}
+
+app.middleware("http")(auth_middleware)

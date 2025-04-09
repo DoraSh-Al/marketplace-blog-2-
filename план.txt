@@ -1,0 +1,325 @@
+Отличный вопрос! Если у нас неограниченное время, мы можем реализовать проект полностью, с учетом всех требований из твоего задания. Я составлю детальный план, который охватывает все аспекты — от аутентификации до фейкового удаления, работы с S3 и асинхронной отправки писем через брокер сообщений. Также я учту твой уровень (начинающий разработчик), чтобы каждый шаг был подробно объяснен, и дам примерное время на реализацию каждого этапа. Время будет рассчитано с запасом, чтобы ты могла спокойно разобраться и протестировать всё.
+
+---
+
+### Полный план реализации проекта "Блог маркетплейса"
+
+#### Цель:
+Создать полноценное API для блога маркетплейса, соответствующее макету Figma и всем требованиям задания, с использованием современного стека и стандартов разработки.
+
+#### Общий стек:
+- **Python** + **FastAPI**
+- **PostgreSQL** (с полнотекстовым поиском)
+- **Poetry** (пакетный менеджер)
+- **Docker** + **Docker Compose**
+- **RabbitMQ** + **Celery** (для асинхронной отправки писем)
+- **MinIO** (S3-совместимое хранилище для изображений)
+- **Pydantic Settings** (конфигурация)
+- **Ruff** + **Pre-commit** (линтеры)
+- **Pytest** (тесты)
+
+#### Общее время:
+Примерно **40-50 часов**. Это с учетом того, что ты начинающий разработчик, и тебе нужно время на изучение, отладку и тестирование. Если бы ты была опытнее, это заняло бы около 20-25 часов.
+
+---
+
+### Подробный план
+
+#### 1. Подготовка окружения и структуры проекта (4-5 часов)
+**Что делаем:**
+- Создаем репозиторий и настраиваем Git.
+- Инициализируем проект с Poetry.
+- Настраиваем `src-layout`.
+- Добавляем Docker и Docker Compose для всех сервисов.(оставили на последок)
+- Настраиваем конфигурацию через `pydantic-settings`.
+- Настраиваем линтеры и pre-commit.
+- Пишем базовый README с инструкциями.
+
+**Шаги:**
+1. Создай репозиторий на GitHub (`marketplace-blog`) с README.
+2. Склонируй его:
+   ```powershell
+   git clone https://github.com/username/marketplace-blog.git
+   cd marketplace-blog
+   git checkout -b dev
+   ```
+3. Установи Poetry и инициализируй проект:
+   ```powershell
+   poetry init
+   poetry add fastapi uvicorn sqlalchemy psycopg2-binary pydantic-settings python-jose[cryptography] passlib[bcrypt] python-multipart minio celery rabbitmq
+   poetry add --group dev pytest ruff pre-commit
+   ```
+4. Создай структуру:
+   ```
+   src/
+     ├── api/         # Эндпоинты
+     ├── core/        # Конфигурация
+     ├── models/      # Модели БД
+     ├── schemas/     # Pydantic-схемы
+     ├── services/    # Логика (например, отправка писем)
+     └── utils/       # Утилиты (JWT, S3)
+   tests/           # Тесты
+   ```
+5. Настрой конфигурацию в `src/core/config.py` (см. предыдущий ответ) и `.env`.
+6. Создай `docker-compose.yml` с сервисами: FastAPI, PostgreSQL, MinIO, RabbitMQ (оставили напоследок).
+7. Настрой линтеры (`ruff.toml`, `.pre-commit-config.yaml`).
+8. Сделай первый коммит:
+   ```powershell
+   git add .
+   git commit -m "Initial project setup"
+   git push origin dev
+   ```
+
+**Время:** 4-5 часов (включая изучение Poetry и Docker).
+
+---
+
+#### 2. Настройка базы данных и моделей (5-6 часов)
+**Что делаем:**
+- Настраиваем SQLAlchemy для работы с PostgreSQL.
+- Создаем модели для пользователей, категорий, статей и удаленных статей.
+- Настраиваем миграции с Alembic.
+
+**Шаги:**
+1. Создай `src/models/base.py` для подключения к БД (см. предыдущий ответ).
+2. Добавь модели в отдельные файлы:
+   - `src/models/user.py` (пользователи).
+   - `src/models/category.py` (категории).
+   - `src/models/article.py` (статьи).
+   - `src/models/deleted_article.py` (удаленные статьи).
+3. Установи Alembic:
+   ```powershell
+   poetry add alembic
+   poetry run alembic init migrations
+   ```
+4. Настрой `migrations/env.py` для работы с `src/models`.
+5. Сгенерируй и примени миграции:(оставили до докера)
+   ```powershell
+   poetry run alembic revision --autogenerate -m "Initial models"
+   poetry run alembic upgrade head
+   ```
+6. Проверь подключение через Docker.
+
+**Модели пример:**
+```python
+# src/models/article.py
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from datetime import datetime
+from src.models.base import Base
+
+class Article(Base):
+    __tablename__ = "articles"
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False, index=True)
+    content = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    image_url = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class DeletedArticle(Base):
+    __tablename__ = "deleted_articles"
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, nullable=False)
+    deleted_at = Column(DateTime, default=datetime.utcnow)
+```
+
+**Время:** 5-6 часов (включая изучение SQLAlchemy и Alembic).
+
+---
+
+#### 3. Аутентификация и JWT (6-7 часов) (все работает, все получилось)
+**Что делаем:**
+- Реализуем регистрацию и логин.
+- Настраиваем JWT-токены в cookies.
+- Добавляем middleware для проверки токена.
+
+**Шаги:**
+1. Создай схемы в `src/schemas/user.py` (см. предыдущий ответ).
+2. Реализуй утилиты для JWT в `src/utils/auth.py`.
+3. Добавь эндпоинты в `src/api/auth.py`:
+   - Регистрация с хешированием пароля.
+   - Логин с выдачей JWT в cookie.
+4. Настрой middleware в `src/main.py`:
+   ```python
+   from fastapi import FastAPI, Request, HTTPException
+   from src.api import router
+   from src.utils.auth import decode_access_token
+
+   app = FastAPI()
+
+   @app.middleware("http")
+   async def auth_middleware(request: Request, call_next):
+       token = request.cookies.get("access_token")
+       if token:
+           try:
+               decode_access_token(token)
+           except:
+               raise HTTPException(status_code=401, detail="Invalid token")
+       response = await call_next(request)
+       return response
+
+   app.include_router(router)
+   ```
+
+**Время:** 6-7 часов (включая изучение JWT и middleware).
+
+---
+
+#### 4. Эндпоинты для статей и категорий (8-10 часов) (все, кроме изображений)
+**Что делаем:**
+- Реализуем все требуемые эндпоинты:
+  - Список статей (с пагинацией и фильтрами).
+  - Создание/список категорий.
+  - Добавление/изменение/удаление статей.
+- Настраиваем полнотекстовый поиск в PostgreSQL.
+- Добавляем работу с MinIO для изображений.
+
+**Шаги:**
+1. Создай схемы в `src/schemas/article.py`:
+   ```python
+   from pydantic import BaseModel
+
+   class ArticleCreate(BaseModel):
+       title: str
+       content: str
+       category_id: int
+
+   class ArticleOut(BaseModel):
+       id: int
+       title: str
+       content: str
+       category_id: int
+       image_url: str | None
+   ```
+2. Реализуй эндпоинты в `src/api/articles.py`:
+   - GET `/articles` с параметрами `search`, `category_id`, `page_number`, `page_size`.
+   - POST `/articles` (загрузка изображения в MinIO).
+   - PATCH `/articles/{id}`.
+   - DELETE `/articles/{id}` (фейковое удаление).
+3. Настрой MinIO в `src/utils/s3.py`:
+   ```python
+   from minio import Minio
+   from src.core.config import settings
+
+   minio_client = Minio(
+       settings.MINIO_URL,
+       access_key=settings.MINIO_ACCESS_KEY,
+       secret_key=settings.MINIO_SECRET_KEY,
+       secure=False
+   )
+
+   def upload_image(file):
+       minio_client.put_object("images", file.filename, file.file, length=-1, part_size=10*1024*1024)
+       return f"http://{settings.MINIO_URL}/images/{file.filename}"
+   ```
+4. Настрой полнотекстовый поиск:
+   - Добавь индекс в модель `Article`:
+     ```python
+     from sqlalchemy import text
+     __table_args__ = (Index('ix_articles_title_content', text("to_tsvector('russian', title || ' ' || content)"), postgresql_using='gin'),)
+     ```
+   - Используй в запросе:
+     ```python
+     query = query.filter(text("to_tsvector('russian', title || ' ' || content) @@ to_tsquery('russian', :search)")).params(search=search)
+     ```
+
+**Время:** 8-10 часов (включая работу с S3 и полнотекстовым поиском).
+
+---
+
+#### 5. Асинхронная отправка писем (5-6 часов)(cделала?)
+**Что делаем:**
+- Настраиваем RabbitMQ и Celery.
+- Реализуем отправку писем при регистрации.
+
+**Шаги:**
+1. Настрой Celery в `src/services/celery_app.py`:
+   ```python
+   from celery import Celery
+   from src.core.config import settings
+
+   celery_app = Celery("worker", broker=settings.RABBITMQ_URL, backend="rpc://")
+   ```
+2. Создай задачу в `src/services/email.py`:
+   ```python
+   from src.services.celery_app import celery_app
+
+   @celery_app.task
+   def send_registration_email(email: str):
+       # Здесь логика отправки письма (например, через smtplib)
+       print(f"Email sent to {email}")
+   ```
+3. Вызови задачу в `/register`:
+   ```python
+   from src.services.email import send_registration_email
+
+   @router.post("/register")
+   def register(user: UserCreate, db: Session = Depends(get_db)):
+       # ... (регистрация)
+       send_registration_email.delay(user.email)
+       return {"msg": "User registered"}
+   ```
+4. Запусти воркер:
+   ```powershell
+   poetry run celery -A src.services.celery_app worker --loglevel=info
+   ```
+
+**Время:** 5-6 часов (включая настройку RabbitMQ и Celery).
+
+---
+
+#### 6. Тестирование и документация (6-8 часов)
+**Что делаем:**
+- Пишем тесты с pytest.
+- Проверяем работу через Postman.
+- Дополняем README.
+
+**Шаги:**
+1. Создай тесты в `tests/test_auth.py` и `tests/test_articles.py`.
+2. Запусти тесты:
+   ```powershell
+   poetry run pytest
+   ```
+3. Проверь все эндпоинты в Postman.
+4. Обнови README с инструкциями по запуску и примерами запросов.
+
+**Время:** 6-8 часов.
+
+---
+
+#### 7. Финализация и Pull Request (2-3 часа)
+**Что делаем:**
+- Проверяем линтеры и pre-commit.
+- Пушим изменения и создаем PR.
+
+**Шаги:**
+1. Проверь код:
+   ```powershell
+   poetry run ruff check .
+   poetry run pre-commit run --all-files
+   ```
+2. Сделай финальный коммит и создай PR на GitHub.
+
+**Время:** 2-3 часа.
+
+---
+
+### Итоговое время
+- Подготовка: 4-5 часов
+- База данных: 5-6 часов
+- Аутентификация: 6-7 часов
+- Эндпоинты: 8-10 часов
+- Асинхронность: 5-6 часов
+- Тестирование: 6-8 часов
+- Финализация: 2-3 часов
+- **Всего: 40-50 часов**
+
+---
+
+### Примечания
+- **Почему так долго?** Ты начинающий разработчик, и я заложил время на изучение инструментов (Docker, Celery, SQLAlchemy), отладку ошибок и тестирование.
+- **Как ускорить?** Если у тебя будет ментор или больше опыта, можно сократить до 20-25 часов, пропуская детальное изучение.
+- **Что дальше?** После этого плана у тебя будет полностью рабочий проект, готовый к ревью и дальнейшему улучшению (например, добавлению CI/CD).
+
+Если хочешь, можем начать с какого-то этапа или детализировать любой шаг — просто скажи!
