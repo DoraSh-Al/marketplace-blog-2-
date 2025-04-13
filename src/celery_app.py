@@ -1,15 +1,12 @@
 import os
 
 from celery import Celery
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = Celery(
-    "blog",
-    broker=os.getenv("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//"),
-    backend=os.getenv("CELERY_RESULT_BACKEND", "rpc://"),
-    include=["src.tasks"]
+    'blog',
+    broker=os.getenv("RABBITMQ_URL", "amqp://Dora:Noviigod1!@rabbitmq:5672/"),
+    backend='rpc://',
+    include=['src.tasks']
 )
 
 app.conf.task_serializer = "json"

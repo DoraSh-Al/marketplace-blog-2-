@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from src.database import get_db
@@ -8,20 +9,32 @@ from src.tasks import send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 @router.post("/register", response_model=UserOut)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == user.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
+    try:
+        # Проверка существующего пользователя
+        if db.query(User).filter(User.email == user.email).first():
+            raise HTTPException(status_code=400, detail="Email already registered")
 
-    db_user = User(email=user.email, password=user.password)  # Хэшируй пароль в продакшене
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+        # Хешируем пароль
+        hashed_password = pwd_context.hash(user.password)
+        db_user = User(email=user.email, password=hashed_password)
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
 
-    send_email.delay(
-        to_email=user.email,
-        subject="Добро пожаловать!",
-        body=f"Привет, {user.email}! Спасибо за регистрацию в нашем блоге."
-    )
+        # Отправка email
+        try:
+            send_email.delay(
+                to_email=user.email,
+                subject="Добро пожаловать!",
+                body=f"Привет, {user.email}! Спасибо за регистрацию в нашем блоге."
+            )
+        except Exception as e:
+            print(f"Failed to send email: {str(e)}")  # Логируем, не прерываем
 
-    return db_user
+        return db_user
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

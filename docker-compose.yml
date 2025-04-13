@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - blog-network
 
   app:
     build:
@@ -25,10 +27,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:Noviigod1!@db:5433/blog_db
+      - DATABASE_URL=postgresql://postgres:Noviigod1!@db:5432/blog_db
+      - RABBITMQ_URL=amqp://Dora:Noviigod1!@rabbitmq:5672/
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=Dora
+      - MINIO_SECRET_KEY=Noviigod1!
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=dasasiraeva882@gmail.com
+      - SMTP_PASSWORD=fmhnkstlczbromxe
     volumes:
       - .:/app
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    networks:
+      - blog-network
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -40,7 +52,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - blog-network
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=Dora
+      - MINIO_ROOT_PASSWORD=Noviigod1!
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - blog-network
 
 volumes:
   postgres_data:
-  
+  minio_data:
+
+networks:
+  blog-network:
+    driver: bridge

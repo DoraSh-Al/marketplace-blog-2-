@@ -6,21 +6,15 @@ from sqlalchemy import engine_from_config, pool
 from src.core.config import settings
 from src.models.base import Base
 
-# Этот объект config предоставляет доступ к значениям из файла alembic.ini
 config = context.config
-
-# Настраиваем URL базы данных из наших настроек
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
-# Настраиваем логирование из alembic.ini
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Указываем метаданные для автогенерации миграций
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -32,7 +26,6 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

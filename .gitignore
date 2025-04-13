@@ -1,24 +1,31 @@
-# Виртуальные окружения
-venv/
-.venv/
-env/
-
-# Кэш Python
+# Python
 __pycache__/
 *.pyc
 *.pyo
-
-# Логи и временные файлы
-*.log
-*.tmp
-
-# Секреты
+*.pyd
+.Python
+env/
+venv/
 .env
 
-
-
-# Poetry (опционально)
-# poetry.lock
-
 # Docker
+*.log
+*.pid
 docker-compose.override.yml
+
+# Poetry
+poetry.lock
+.cache/
+
+# Database
+*.sql
+*.sqlite3
+
+# Misc
+*.DS_Store
+*.idea/
+.vscode/
+*.swp
+
+
+план.txt
