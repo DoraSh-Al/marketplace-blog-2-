@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 
 from src.api.articles import router as articles_router  # Добавляем
@@ -13,6 +14,9 @@ app.include_router(auth_router)
 app.include_router(articles_router)  # Добавляем
 app.include_router(categories_router)
 app.include_router(users_router)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8001)
 
 # Middleware для проверки токена
 @app.middleware("http")

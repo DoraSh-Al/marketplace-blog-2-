@@ -25,10 +25,10 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
       - DATABASE_URL=postgresql://postgres:Noviigod1!@db:5432/blog_db
-      - RABBITMQ_URL=amqp://Dora:Noviigod1!@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=Dora
       - MINIO_SECRET_KEY=Noviigod1!
@@ -36,9 +36,10 @@ services:
       - SMTP_PORT=587
       - SMTP_USER=dasasiraeva882@gmail.com
       - SMTP_PASSWORD=fmhnkstlczbromxe
+      - TZ=Europe/Moscow
     volumes:
       - .:/app
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload --log-level debug
     networks:
       - blog-network
 
@@ -52,6 +53,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - blog-network
 
@@ -66,6 +73,31 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    networks:
+      - blog-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A src.celery_app worker --loglevel=info --pool=solo
+    depends_on:
+      - rabbitmq
+      - db
+    environment:
+      - DATABASE_URL=postgresql://postgres:Noviigod1!@db:5432/blog_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=Dora
+      - MINIO_SECRET_KEY=Noviigod1!
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=dasasiraeva882@gmail.com
+      - SMTP_PASSWORD=fmhnkstlczbromxe
+    volumes:
+      - .:/app
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - blog-network
 
