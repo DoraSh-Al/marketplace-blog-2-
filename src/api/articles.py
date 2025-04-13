@@ -1,70 +1,73 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import text
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.models.article import Article
+from src.models.category import Category
 from src.models.database import get_db
 from src.models.deleted_article import DeletedArticle
-from src.schemas.article import ArticleCreate, ArticleOut, ArticleUpdate
+from src.schemas.article import ArticleOut, ArticleUpdate
+from src.utils.s3 import upload_image
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
-@router.post("/", response_model=ArticleOut)
-def create_article(
-    article: ArticleCreate = Body(...),  # Явно указываем тело
-    db: Session = Depends(get_db)
-):
-    new_article = Article(
-        title=article.title,
-        content=article.content,
-        category_id=article.category_id,
-        image_url=None
-    )
-    db.add(new_article)
-    db.commit()
-    db.refresh(new_article)
-    return new_article
-
-@router.get("/", response_model=List[ArticleOut])  # Список статей
+@router.get("/", response_model=List[ArticleOut])
 def get_articles(
-    search: str = Query(None, description="Search term for title or content"),
-    category_id: int = Query(None, description="Filter by category ID"),
-    page_number: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    search: str = None,
+    category_id: int = None,
+    page_number: int = 1,
+    page_size: int = 10
 ):
     query = db.query(Article)
-
-    # Фильтр по категории
-    if category_id:
-        query = query.filter(Article.category_id == category_id)
-
-    # Полнотекстовый поиск
     if search:
         query = query.filter(
-            text("to_tsvector('russian', title || ' ' || content) @@ to_tsquery('russian', :search)")
-        ).params(search=search.replace(" ", " & "))
-
-    # Пагинация
-    query.count()
-    query = query.offset((page_number - 1) * page_size).limit(page_size)
-    articles = query.all()
-
+            func.to_tsvector('russian', Article.title + ' ' + Article.content).match(search, postgresql_regconfig='russian')
+        )
+    if category_id:
+        query = query.filter(Article.category_id == category_id)
+    articles = query.offset((page_number - 1) * page_size).limit(page_size).all()
     return articles
 
-@router.get("/{article_id}", response_model=ArticleOut)  # Одна статья
-def read_article(article_id: int, db: Session = Depends(get_db)):
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    return article
+@router.post("/", response_model=ArticleOut, operation_id="create_new_article")
+async def create_article(
+    title: str = Form(...),
+    content: str = Form(...),
+    category_id: int = Form(...),
+    image: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        if not db.query(Category).filter(Category.id == category_id).first():
+            raise HTTPException(status_code=404, detail="Category not found")
 
-@router.put("/{article_id}", response_model=ArticleOut)
-def update_article(article_id: int, article: ArticleUpdate, db: Session = Depends(get_db)):
-    db_article = db.query(Article).filter(Article.id == article_id).first()
+        image_url = None
+        if image:
+            if not image.content_type.startswith("image/"):
+                raise HTTPException(status_code=400, detail="Only images are allowed")
+            image_url = await upload_image(image)
+
+        db_article = Article(
+            title=title,
+            content=content,
+            category_id=category_id,
+            image_url=image_url
+        )
+        db.add(db_article)
+        db.commit()
+        db.refresh(db_article)
+        return db_article
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+
+@router.patch("/{id}", response_model=ArticleOut)
+def update_article(id: int, article: ArticleUpdate, db: Session = Depends(get_db)):
+    db_article = db.query(Article).filter(Article.id == id).first()
     if not db_article:
         raise HTTPException(status_code=404, detail="Article not found")
     update_data = article.dict(exclude_unset=True)
@@ -75,21 +78,13 @@ def update_article(article_id: int, article: ArticleUpdate, db: Session = Depend
     db.refresh(db_article)
     return db_article
 
-@router.delete("/{article_id}")
-def delete_article(article_id: int, db: Session = Depends(get_db)):
-    db_article = db.query(Article).filter(Article.id == article_id).first()
+@router.delete("/{id}")
+def delete_article(id: int, db: Session = Depends(get_db)):
+    db_article = db.query(Article).filter(Article.id == id).first()
     if not db_article:
         raise HTTPException(status_code=404, detail="Article not found")
-
-    # Фейковое удаление: переносим в deleted_articles
-    deleted_article = DeletedArticle(
-        article_id=db_article.id,
-        title=db_article.title,
-        content=db_article.content,
-        category_id=db_article.category_id,
-        image_url=db_article.image_url
-    )
+    deleted_article = DeletedArticle(article_id=id)
     db.add(deleted_article)
     db.delete(db_article)
     db.commit()
-    return {"message": "Article moved to deleted_articles"}
+    return {"msg": "Article deleted"}

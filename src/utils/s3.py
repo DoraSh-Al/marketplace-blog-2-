@@ -1,3 +1,7 @@
+import uuid
+from io import BytesIO
+
+from fastapi import UploadFile
 from minio import Minio
 
 from src.core.config import settings
@@ -9,16 +13,27 @@ minio_client = Minio(
     secure=False
 )
 
-def upload_image(file):
-    bucket_name = "images"
-    # Проверяем, существует ли бакет, и создаём, если нет
-    if not minio_client.bucket_exists(bucket_name):
-        minio_client.make_bucket(bucket_name)
-    minio_client.put_object(
-        bucket_name,
-        file.filename,
-        file.file,
-        length=-1,
-        part_size=10*1024*1024
-    )
-    return f"http://{settings.MINIO_ENDPOINT}/{bucket_name}/{file.filename}"
+BUCKET_NAME = "images"
+
+def ensure_bucket():
+    if not minio_client.bucket_exists(BUCKET_NAME):
+        minio_client.make_bucket(BUCKET_NAME)
+
+async def upload_image(file: UploadFile):
+    try:
+        ensure_bucket()
+        file_name = f"{uuid.uuid4()}_{file.filename}"
+        content = await file.read()  # Получаем байты
+        if not content:
+            raise ValueError("Empty image file")
+        # Передаем байты как BytesIO для MinIO
+        minio_client.put_object(
+            BUCKET_NAME,
+            file_name,
+            data=BytesIO(content),
+            length=len(content),
+            content_type=file.content_type
+        )
+        return f"http://{settings.MINIO_ENDPOINT}/{BUCKET_NAME}/{file_name}"
+    except Exception as e:
+        raise Exception(f"Failed to upload image: {str(e)}")

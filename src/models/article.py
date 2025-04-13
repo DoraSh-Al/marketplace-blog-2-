@@ -1,21 +1,16 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, text
-from sqlalchemy.sql import func
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 
 from src.models.base import Base
 
 
 class Article(Base):
     __tablename__ = "articles"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False, index=True)
     content = Column(String, nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"))
     image_url = Column(String, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    __table_args__ = (
-        Index('ix_articles_title_content',
-              text("to_tsvector('russian', title || ' ' || content)"),
-              postgresql_using='gin'),
-    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
